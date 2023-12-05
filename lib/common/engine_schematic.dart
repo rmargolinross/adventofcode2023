@@ -1,5 +1,6 @@
 import 'dart:math';
 
+import 'package:adventofcode2022/common/tuple.dart';
 import 'package:flutter/material.dart';
 
 class EngineSchematic {
@@ -10,7 +11,7 @@ class EngineSchematic {
   EngineSchematic.fromString(String schematicString)
       : schematic = schematicString
             .split('\n')
-            .map((row) => row.characters.toList())
+            .map((row) => row.trim().characters.toList())
             .toList();
 
   int sumOfPartNumbers() {
@@ -50,32 +51,83 @@ class EngineSchematic {
     var total = 0;
 
     for (int i = 0; i < schematic.length; i++) {
-      var currentNumber = '';
-      var validGear = false;
-      var validGearValue = 0;
-      var row = schematic[i];
-
-      for (int j = 0; j < row.length; j++) {
-        // Loop through and find if a number is a gear (we need only look down and right)
-        var currentValue = int.tryParse(row[j]);
-        if (currentValue != null) {
-          currentNumber += row[j];
-          var gearValue = _getGearValue(i, j);
-          if (gearValue > 0) {
-            validGear = true;
-            validGearValue = gearValue;
-          }
-        } else {
-          if (validGear) {
-            total += int.parse(currentNumber) * validGearValue;
-          }
-          validGear = false;
-          validGearValue = 0;
-          currentNumber = '';
+      for (int j = 0; j < schematic[i].length; j++) {
+        if (schematic[i][j] == '*') {
+          total += _getGearValue(i, j);
         }
       }
     }
     return total;
+  }
+
+  bool _hasOnePair(int i, int j) {
+    /*
+     * Check the children for a matched pair around the cog
+     * ...
+     * .*.
+     * ...
+     */
+
+    var numbers = 0;
+    var minI = max(i - 1, 0);
+    var minJ = max(j - 1, 0);
+    var maxI = min(i + 2, schematic.length);
+    var maxJ = min(j + 2, schematic[i].length);
+
+    for (int x = minI; x < maxI; x++) {
+      var currentValue = '';
+      for (int y = minJ; y < maxJ; y++) {
+        if (int.tryParse(schematic[x][y]) != null) {
+          currentValue += schematic[x][y];
+        } else if (currentValue.isNotEmpty) {
+          currentValue = '';
+          numbers++;
+        }
+      }
+      if (currentValue.isNotEmpty) {
+        numbers++;
+      }
+    }
+
+    return numbers == 2;
+  }
+
+  int _getGearRatio(int i, int j) {
+    // Find the pair of numbers around the cog and get their values multiplied by each other
+    var number1 = 0;
+    var gapNumber = false;
+    var minI = max(i - 1, 0);
+    var minJ = max(j - 1, 0);
+    var maxI = min(i + 2, schematic.length);
+    var maxJ = min(j + 2, schematic[i].length);
+
+    for (int x = minI; x < maxI; x++) {
+      for (int y = minJ; y < maxJ; y++) {
+        var isNumber = int.tryParse(schematic[x][y]) != null;
+        if (isNumber) {
+          var fullNumber = _getFullNumber(x, y);
+          if (number1 == 0) {
+            number1 = fullNumber;
+          } else if (gapNumber) {
+            return number1 * fullNumber;
+          }
+        } else {
+          if (number1 != 0) {
+            gapNumber = true;
+          }
+        }
+      }
+
+      if (number1 != 0) {
+        gapNumber = true;
+      }
+    }
+
+    return 0;
+  }
+
+  void _removeCog(int i, int j) {
+    schematic[i][j] = '.';
   }
 
   bool _isValidPartNumber(int i, int j) {
@@ -97,41 +149,14 @@ class EngineSchematic {
   }
 
   int _getGearValue(int i, int j) {
-    var gearValue = 0;
-
-    var maxI = min(i + 2, schematic.length);
-    var minJ = max(j - 1, 0);
-    var maxJ = min(j + 2, schematic[i].length);
-    var gearLocationX = 0;
-    var gearLocationY = 0;
-
-    for (int x = i; x < maxI; x++) {
-      for (int y = minJ; y < maxJ; y++) {
-        var value = schematic[x][y];
-        if (value == '*') {
-          gearLocationX = x;
-          gearLocationY = y;
-          break;
-        }
-      }
+    if (_hasOnePair(i, j)) {
+      var ratio = _getGearRatio(i, j);
+      // Remove the cog so we don't repeat
+      _removeCog(i, j);
+      return ratio;
+    } else {
+      return 0;
     }
-
-    maxI = min(gearLocationX + 2, schematic.length);
-    minJ = max(gearLocationY - 1, 0);
-    maxJ = min(gearLocationY + 2, schematic[i].length);
-
-    for (int x = gearLocationX; x < maxI; x++) {
-      for (int y = minJ; y < maxJ; y++) {
-        var value = schematic[x][y];
-        if (int.tryParse(value) != null) {
-          // Found a number for the gear now traverse this row to find the full number
-          gearValue = _getFullNumber(x, y);
-          break;
-        }
-      }
-    }
-
-    return gearValue;
   }
 
   int _getFullNumber(int i, int j) {
@@ -148,6 +173,6 @@ class EngineSchematic {
       }
     }
 
-    return 0;
+    return int.tryParse(currentNumber) ?? 0;
   }
 }
